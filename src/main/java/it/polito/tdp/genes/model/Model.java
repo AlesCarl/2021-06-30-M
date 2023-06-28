@@ -20,6 +20,8 @@ public class Model {
     private List<Integer> allCromosomi ; 
     
     Map <String,Genes>idMapGenes= new HashMap<>();
+    private List<Integer> bestCammino ; 
+   
     
 
     
@@ -29,6 +31,7 @@ public class Model {
     	this.dao= new GenesDao();  
     	this.graph= new SimpleDirectedWeightedGraph<>(DefaultWeightedEdge.class);
     	this.allCromosomi= new ArrayList<>();
+    	
     	
     }
     
@@ -56,9 +59,11 @@ public class Model {
 	 		/*
 	 		Un arco collega due CROMOSOMI diversi solo se: 
 	 		
-	 		i due cromosomi contengono due geni (uno per cromosoma) che compaiono 
-	 		(nello stesso ordine) nella tabella interactions. 
-	 		
+	 		************
+	 		i due CROMOSOMI abbiano due geni ( uno a testa ) che compaiano in una riga 
+	 		della tabella interactions
+	 		************
+	 		*
 	 		Si noti che, per ciascun cromosoma, possono esistere più geni, e 
 	 		ciascuno di essi potrebbe essere presente 
 	 		più volte (associato a function diverse).
@@ -70,17 +75,22 @@ public class Model {
 	 1. dato un cromosoma, trovo tutti i geni che hanno quel cromosoma --> listGenesDaCromosoma
 	 2. 
 	 		 */
+	 	 List<Interactions> allInteractionsCromosomi= new ArrayList<>();
 	 		
 	 		for(Integer c1: this.allCromosomi) {
 	 			for(Integer c2: this.allCromosomi) {
 	 				
 	 				if(c1!=c2) {  // provo così perche orientato
-	 					double peso= calcoloPeso(c1,c2); 
-	 			 
-	 			 				if( peso>0 ) {
-	 			 					
-	 		 						Graphs.addEdgeWithVertices(this.graph, c1, c2, peso);
-	 		 						
+	 				
+	 					allInteractionsCromosomi=dao.collegamentoArchi(c1,c2,idMapGenes);
+	 					
+	 					  if(allInteractionsCromosomi.size()!=0) {
+	 						
+	 				    	 double peso= calcoloPeso(allInteractionsCromosomi); 
+	 			
+	 		 					Graphs.addEdgeWithVertices(this.graph, c1, c2, peso);
+	 		 		
+	 			 			
 	 		        }
 	 			}
 	 		}
@@ -88,39 +98,209 @@ public class Model {
 	 		System.out.println("\nNUMERO ARCHI GRAFO: " +this.graph.edgeSet().size());
 	
 	 }
+    
+    
+    
+    
+    
+	List <DefaultWeightedEdge> listArchiSup= new ArrayList<>() ;
 
+    public int ContaArchiSup(int soglia) { // soglia = 5; 
+    	
+    	
+    	for( DefaultWeightedEdge ee: this.graph.edgeSet() ) {
+
+			if( this.graph.getEdgeWeight(ee) > soglia) {
+				listArchiSup.add(ee); 
+			}
+				
+		}
+		return listArchiSup.size();
+		
+	}
+    public int ContaArchiInf(int soglia) { // soglia = 5; 
+    	
+    	List<DefaultWeightedEdge> list= new ArrayList<>() ; 
+    	
+    	for( DefaultWeightedEdge ee: this.graph.edgeSet() ) {
+
+			if( this.graph.getEdgeWeight(ee) < soglia ) {
+				list.add(ee); 
+			}
+				
+		}
+		return list.size();
+		
+	}
+	
+	
+    
     //arco c1 - c2
-	private double calcoloPeso(Integer c1, Integer c2) {
-		
+	private double calcoloPeso( List<Interactions> allInteractionsCromosomi) {
 		double peso = 0.0; 
+
+			for(Interactions ii: allInteractionsCromosomi) 
+				peso+= ii.getExpressionCorr();
 		
-		List<Genes> listGen1= dao.getGenesCromosoma(c1); //all geni del cromosoma c1
-		List<Genes> listGen2= dao.getGenesCromosoma(c2); //all geni del cromosoma c2
+		return peso;	
+	}
+	
+	
+	public double getMinimo() { 
+		double min=100000;
+		
+		for( DefaultWeightedEdge ee: this.graph.edgeSet() ) {
+
+			if( this.graph.getEdgeWeight(ee) < min ) {
+				min= graph.getEdgeWeight(ee); 
+			}
+				
+		}
+		return min;
+		
+	}
+	
+	public double getMax() { 
+		double max=0;
+		
+		for( DefaultWeightedEdge ee: this.graph.edgeSet() ) {
+
+			if( this.graph.getEdgeWeight(ee) > max ) {
+				max= graph.getEdgeWeight(ee); 
+			}
+				
+		}
+		return max;
+		
+	}
+	
+	/*****************  RICORSIONE:  ******************/ 
+	
+	/* 
+	 * determinare il più lungo cammino di vertici (cromosomi) che sia composto esclusivamente da 
+	 * archi di peso >S. 
+	 
+	 * La lunghezza del cammino sarà valutata dalla somma dei pesi degli archi
+	 */
+	
+	
+	double bestSumArchi; 
+	
+	public List<Integer> getPercorso ( int soglia ) {
+		
+       List <Integer> parziale = new ArrayList<>() ; 
+		
+		this.bestCammino= new ArrayList<>() ; 
+		
+		double sumPesiArchi = 0.0; 
+		this.bestSumArchi= 0.0; 
+		
+		//int livello=0; 
+		
+		parziale.add ( verticeMax()) ;  
+/**  ho scelto come partenza il vertice sorgente dell'arco con grado max  */ 
+		
+		//System.out.println("SIZE LIST: " +listArchiSup.size());
+		
+		ricorsione(parziale,listArchiSup,sumPesiArchi ); 
+		
+		
+		return this.bestCammino;  //lista vertci 
 		
 		
 		
-		for(Genes g1: listGen1 ) {
-			for(Genes g2: listGen2 ) {
-				if(g1.getGeneId().compareTo(g2.getGeneId())!= 0) {
-					
-					if(dao.collegamentoArchi(g1.getChromosome(),g2.getChromosome())== true) { // i due geni sono nella stessa function
-						return dao.getSumCorrelazione(c1,c2); //calcolo il peso 
-					} 
-					else if(dao.collegamentoArchi(g2.getChromosome(),g1.getChromosome())== true) { // i due geni sono nella stessa function
-						return dao.getSumCorrelazione(c2,c1);
-					
+	}
+// ritorna il vertice sorgente dell'arco con grado max. 
+	private Integer verticeMax() {
+		
+		DefaultWeightedEdge maxEdge = null; 
+		double max=0; 
+			
+			for( DefaultWeightedEdge ee: listArchiSup ) {
+				
+				if( this.graph.getEdgeWeight(ee) > max ) {
+					 max= graph.getEdgeWeight(ee); 
+					 maxEdge= ee; 
+					 
 				}
 			}
+					
+		return graph.getEdgeSource(maxEdge);
+	}
+
+	
+	private void ricorsione(List<Integer> parziale, List<DefaultWeightedEdge> listArchiSup, double sumPesiArchi) {
+		
+		Integer current = parziale.get(parziale.size()-1);
+		
+		
+		/* condizione uscita **/    // non so quando fermarmi .... 
+		
+		/* if(parziale.size()==this.listArchiSup.size()) {
+			return; 
+		} */ 
+		
+		if(sumPesiArchi> bestSumArchi) {
 			
+			bestSumArchi= sumPesiArchi; 
+			bestCammino= new ArrayList<>(parziale);
 		}
 		
 		
+		
+
+		/** continuo ad aggiungere elementi in parziale **/ 
+	     
+		List<Integer> successori= Graphs.successorListOf(graph, current);
+		List<Integer> newSuccessori= new ArrayList<>();  
+	
+		
+		for(Integer ii: successori) {
+		    if(!parziale.contains(ii)) {
+		    	newSuccessori.add(ii);  // QUI METTO SOLO I VERTICI CHE NON SONO GIA' STATI USATI
+		    }
+	  }
+	
+		
+		/** ***  condizione di uscita  ***/
+	    if( newSuccessori.size()==0 ) {
+	    	return; 
+	    }
+	     
+		
+	     for(Integer a: newSuccessori) {
+	    	 
+	    	 
+	    	    //********* QUI COLLEGO edge e vertex ********* 
+	    	   if( listArchiSup.contains(graph.getEdge(current, a)) ){ 
+	    	    	 
+	    	      sumPesiArchi+= graph.getEdgeWeight(graph.getEdge(current, a));
+		    	  parziale.add(a);
+		    	  ricorsione(parziale,listArchiSup ,sumPesiArchi);
+		    	  
+		    	  parziale.remove(a); // backTracking
+		    	  sumPesiArchi-= graph.getEdgeWeight(graph.getEdge(current, a)); //backTracking
+	    	     }
+	     
+	      }
+		
+	    
+		
+		
 	}
-    
-		return peso;
+
 	
 	
-	}
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
 	
     
     
