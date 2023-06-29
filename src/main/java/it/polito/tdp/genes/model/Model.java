@@ -276,6 +276,7 @@ public class Model {
 	    	    	 
 	    	      sumPesiArchi+= graph.getEdgeWeight(graph.getEdge(current, a));
 		    	  parziale.add(a);
+		    	  
 		    	  ricorsione(parziale,listArchiSup ,sumPesiArchi);
 		    	  
 		    	  parziale.remove(a); // backTracking
